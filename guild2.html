@@ -58,7 +58,7 @@ th{color:var(--mut);font-weight:600;font-size:14px}
 <nav><button data-tab="auctions" class="on">Auctions</button><button data-tab="members">Members</button><button data-tab="admin" class="adm">Admin</button></nav>
 <main id="v"></main>
 <script>
-const API='https://script.google.com/macros/s/AKfycby3Er6hwuyYO7BKAQNJgP0fvgvzDAmx_tGXoDBbJ_9jEAJQcGx0CyY98sFYlhhH7Aq8Cg/exec'; // Google Apps Script web app URL
+const API='PASTE_YOUR_WEB_APP_URL_HERE'; // Google Apps Script web app URL
 const KEY='rocGuildBids2_v1',$=s=>document.querySelector(s);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const DEF=()=>({nid:1,groups:[],members:[],auctions:[],history:[],requests:[]});
@@ -75,10 +75,14 @@ const byId=id=>S.members.find(m=>m.id==id);
 const total=m=>m.base+S.history.filter(h=>h.mid==m.id).reduce((a,h)=>a+h.n,0);
 const queue=g=>S.members.filter(m=>m.group==g).map(m=>({m,t:total(m)})).sort((a,b)=>a.m.ord-b.m.ord);
 let P={};
-function plan(){const out={},cur={};
+function plan(){const out={},used={};
   [...S.auctions].sort((a,b)=>a.date<b.date?-1:1).forEach(a=>[...a.groups].sort((x,y)=>x-y).forEach(g=>{
-    const q=queue(g).map(x=>x.m),n=Math.min(av(a,g),q.length);cur[g]=cur[g]||0;out[a.date+'-'+g]=[];
-    for(let i=0;i<n;i++)out[a.date+'-'+g].push(q[(cur[g]+i)%q.length]);cur[g]+=n}));
+    const q=queue(g).map(x=>x.m),k=a.date+'-'+g,u=used[g]=used[g]||new Set();
+    if(a.manual&&a.manual[g]){
+      if(q.length&&q.every(m=>u.has(m.id)))u.clear();
+      out[k]=a.manual[g].map(id=>q.find(m=>m.id==id)).filter(Boolean);out[k].forEach(m=>u.add(m.id));return}
+    const n=Math.min(av(a,g),q.length);out[k]=[];
+    while(out[k].length<n){const pick=()=>q.find(m=>!u.has(m.id)&&!out[k].includes(m));let c=pick();if(!c){u.clear();c=pick()}if(!c)break;out[k].push(c);u.add(c.id)}}));
   return out}
 const wins=(d,g)=>S.history.filter(h=>h.date==d&&byId(h.mid)&&byId(h.mid).group==g).reduce((a,h)=>a+h.n,0);
 const wonOn=(d,id)=>S.history.some(h=>h.date==d&&h.mid==id);
@@ -90,11 +94,13 @@ function card(a){
   const d=pd(a.date),past=d<today(),sched=new Set();
   const groups=[...a.groups].sort((x,y)=>x-y);
   const gp=groups.map(g=>{
-    const q=queue(g),n=av(a,g),won=wins(a.date,g);
+    const q=queue(g),n=av(a,g),won=wins(a.date,g),man=a.manual&&a.manual[g];
     const top=(P[a.date+'-'+g]||[]).map(m=>({m,t:total(m)}));top.forEach(x=>sched.add(x.m.id));
     const li=x=>`<li><span class="n">${esc(x.m.name)}</span>${wonOn(a.date,x.m.id)?'<span class="ok">Won</span>':`<button class="adm" data-act="won" data-d="${a.date}" data-m="${x.m.id}">Mark won</button>`}</li>`;
     return`<div class="gp"><div class="gh"><h3>Group ${g}</h3><span><span class="slots">${n} fragment${n==1?'':'s'} available${won?`, ${won} won`:''}</span> <span class="adm"><button data-act="av" data-d="${a.date}" data-g="${g}" data-v="-1" aria-label="Fewer fragments">-</button><button data-act="av" data-d="${a.date}" data-g="${g}" data-v="1" aria-label="More fragments">+</button></span></span></div>
-    <ul>${top.length?top.map(li).join(''):'<li class="empty">No fragments available for this group.</li>'}</ul>
+    <ul>${top.length?top.map(li).join(''):(man?'<li class="empty">Bidders not picked yet.</li>':'<li class="empty">No fragments available for this group.</li>')}</ul>
+    <div class="row adm"><label><input type="checkbox" data-man="${g}" data-d="${a.date}" ${man?'checked':''}> Pick bidders manually</label></div>
+    ${man?`<div class="row adm">${q.map(x=>`<label><input type="checkbox" data-pick="${x.m.id}" data-d="${a.date}" data-g="${g}" ${man.includes(x.m.id)?'checked':''}> ${esc(x.m.name)}</label>`).join('')}</div>`:''}
     </div>`}).join('');
   const reqs=S.requests.map((r,i)=>({r,i})).filter(x=>x.r.date==a.date&&byId(x.r.mid));
   const taken=new Set(reqs.map(x=>x.r.mid));
@@ -135,7 +141,7 @@ const ACT={
   addAuc(){const v=$('#nd').value;if(!v)return alert('Pick a date.');if(aucn(v))return alert('That date is already listed.');if(![0,2,4].includes(pd(v).getDay())&&!confirm('That day is not a Tuesday, Thursday or Sunday. Add it anyway?'))return;S.auctions.push({date:v,groups:[],avail:{}})},
   delAuc(e){if(confirm('Delete this auction and its requests?')){S.auctions=S.auctions.filter(a=>a.date!=e.dataset.d);S.requests=S.requests.filter(r=>r.date!=e.dataset.d)}},
   addMem(){if(!$('#ng').value)return alert('Add a group first.');const n=$('#nm').value.trim(),c=$('#nc').value.trim();if(!n||!c)return alert('Enter a name and a class.');S.members.push({id:S.nid++,name:n,cls:c,group:+$('#ng').value,base:Math.max(0,+$('#nb').value||0),ord:Math.max(-1,...S.members.map(m=>m.ord))+1})},
-  delMem(e){const m=byId(e.dataset.m);if(confirm(`Remove ${m.name}? Their win history is removed too.`)){S.members=S.members.filter(x=>x.id!=m.id);S.history=S.history.filter(h=>h.mid!=m.id);S.requests=S.requests.filter(r=>r.mid!=m.id)}},
+  delMem(e){const m=byId(e.dataset.m);if(confirm(`Remove ${m.name}? Their win history is removed too.`)){S.members=S.members.filter(x=>x.id!=m.id);S.history=S.history.filter(h=>h.mid!=m.id);S.requests=S.requests.filter(r=>r.mid!=m.id);S.auctions.forEach(a=>{for(const g in a.manual||{})a.manual[g]=a.manual[g].filter(x=>x!=m.id)})}},
   move(e){const m=byId(e.dataset.m),q=queue(m.group).map(x=>x.m),i=q.indexOf(m),o=q[i+ +e.dataset.v];if(!o)return;[m.ord,o.ord]=[o.ord,m.ord]},
   addGrp(){const g=Math.floor(+$('#gn').value),c=GS();if(!(g>=1))return alert('Enter a group number.');if(c.includes(g))return alert('That group already exists.');S.groups=[...c,g]},
   delGrp(e){const g=+e.dataset.g;if(S.members.some(m=>m.group==g))return alert('Remove the members in this group first.');S.groups=GS().filter(x=>x!=g);S.auctions.forEach(a=>a.groups=a.groups.filter(x=>x!=g))},
@@ -165,6 +171,8 @@ document.addEventListener('change',async ev=>{
       if(!ok){t.checked=false;alert('Passcode not accepted.')}else{PASS=p;sessionStorage.setItem('pw2',p);if(serverEmpty)push()}}
     return render()}
   if(t.dataset.cls){const m=byId(t.dataset.cls),v=t.value.trim();if(v)m.cls=v;save();render();push();return}
+  if(t.dataset.man){const a=aucn(t.dataset.d),g=t.dataset.man;a.manual=a.manual||{};if(t.checked)a.manual[g]=[];else delete a.manual[g];save();render();push();return}
+  if(t.dataset.pick){const a=aucn(t.dataset.d),g=t.dataset.g,id=+t.dataset.pick,l=a.manual[g]||[],mx=av(a,g);if(t.checked){if(l.length>=mx){t.checked=false;return alert(`Group ${g} only has ${mx} fragment(s) available. Raise the number or untick someone first.`)}a.manual[g]=[...l,id]}else a.manual[g]=l.filter(x=>x!=id);save();render();push();return}
   if(t.dataset.grp){const a=aucn(t.dataset.d),g=+t.dataset.grp;a.groups=t.checked?[...new Set([...a.groups,g])]:a.groups.filter(x=>x!=g);save();render();push()}
   if(t.id=='rf'&&t.files[0]){const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!Array.isArray(d.members)||!Array.isArray(d.auctions))throw 0;d.members.forEach((m,i)=>{if(m.ord==null)m.ord=i});S=d;save();render();push()}catch(e){alert('That file is not a valid backup.')}};r.readAsText(t.files[0])}});
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)pull()});
