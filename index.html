@@ -15,8 +15,8 @@ header{display:flex;justify-content:space-between;align-items:center;padding-top
 h1,h2,h3,.big{font-family:"Bricolage Grotesque",Georgia,serif;margin:0}
 h1{font-size:28px;font-weight:800}
 .sw{font-size:14px;color:var(--mut);display:flex;gap:6px;align-items:center}
-nav{display:flex;gap:4px;margin-top:14px;border-bottom:1px solid var(--line)}
-nav button{background:none;border:0;border-bottom:3px solid transparent;padding:10px 14px;font:600 15px inherit;color:var(--mut);cursor:pointer}
+nav{display:flex;overflow-x:auto;gap:4px;margin-top:14px;border-bottom:1px solid var(--line)}
+nav button{white-space:nowrap;background:none;border:0;border-bottom:3px solid transparent;padding:10px 14px;font:600 15px inherit;color:var(--mut);cursor:pointer}
 nav button.on{color:var(--ink);border-color:var(--ice)}
 main{padding-top:18px;padding-bottom:60px}
 .adm{display:none!important}body.admin .adm{display:revert!important}
@@ -51,11 +51,14 @@ th,td{text-align:left;padding:6px 10px;border-bottom:1px solid var(--line)}
 th{color:var(--mut);font-weight:600;font-size:14px}
 .box{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:16px}
 @media(max-width:520px){.auc{grid-template-columns:70px 1fr}.dt .big{font-size:28px}}
+.cf{display:flex;flex-direction:column;gap:2px;font-size:14px;color:var(--mut)}
+.cg{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;margin:10px 0 14px}
+.warn{color:var(--red);font-weight:700;border:2px solid var(--red);border-radius:8px;padding:10px 12px;margin:0 0 14px}
 </style>
 </head>
 <body>
 <header><h1>Puppet Fragment Bidding</h1><button data-act="refresh">Refresh</button> <label class="sw"><input type="checkbox" id="admtog" autocomplete="off"> Admin mode<small id="admst"></small></label></header>
-<nav><button data-tab="auctions" class="on">Auctions</button><button data-tab="members">Members</button><button data-tab="admin" class="adm">Admin</button></nav>
+<nav><button data-tab="auctions" class="on">Auctions</button><button data-tab="members">Members</button><button data-tab="calc">DEF Calculator</button><button data-tab="admin" class="adm">Admin</button></nav>
 <main id="v"></main>
 <script>
 const API='https://script.google.com/macros/s/AKfycbxQ-cPB-n6hdVMhheHUI9GU1ubEU6cClpzLUAEDIlmYKdjz_zl2-tAmsjpe8Lr40kA/exec'; // Google Apps Script web app URL
@@ -132,8 +135,23 @@ function render(){
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.tab==tab));
   const auc=[...S.auctions].sort((a,b)=>a.date<b.date?-1:1);
   const up=auc.filter(a=>pd(a.date)>=today()),pa=auc.filter(a=>pd(a.date)<today());
-  $('#v').innerHTML=(status?`<p class="empty">${status}</p>`:'')+(tab=='auctions'?(up.map(card).join('')||'<p class="empty">No upcoming auctions. Turn on Admin mode to add one.</p>')+(pa.length?`<details><summary>${pa.length} past auction${pa.length>1?'s':''}</summary><div style="margin-top:10px">${pa.reverse().map(card).join('')}</div></details>`:''):tab=='members'?membersView():adminView());
+  $('#v').innerHTML=(status?`<p class="empty">${status}</p>`:'')+(tab=='auctions'?(up.map(card).join('')||'<p class="empty">No upcoming auctions. Turn on Admin mode to add one.</p>')+(pa.length?`<details><summary>${pa.length} past auction${pa.length>1?'s':''}</summary><div style="margin-top:10px">${pa.reverse().map(card).join('')}</div></details>`:''):tab=='calc'?calcView():tab=='members'?membersView():adminView());if(tab=='calc')updCalc();
 }
+const CK=KEY+'_calc',CF=[['tot','Total {X} (Character Details)'],['eq','Equipment {X} % (e.g. 132.35)'],['ref','Refine {X}'],['flat','Flat Ignore {X} (attacker)'],['ign','Ignore {X} % (attacker)']];
+const CALC={p:{tot:12878,eq:132.35,ref:2.36,flat:3300,ign:0},m:{tot:3934,eq:125.03,ref:0,flat:1000,ign:0}};
+try{const c=JSON.parse(localStorage.getItem(CK));if(c){Object.assign(CALC.p,c.p);Object.assign(CALC.m,c.m)}}catch(e){}
+const defK=()=>S.defK>0?S.defK:495;
+const fx=(n,d=2)=>Number.isFinite(n)?n.toLocaleString('en-US',{maximumFractionDigits:d,minimumFractionDigits:d}):'-';
+function calcView(){
+  const box=(k,X)=>`<div class="box"><h3>${X} calculator</h3><div class="cg">${CF.map(([f,l])=>`<label class="cf">${l.replace('{X}',X)}<input type="number" step="any" data-c="${k}.${f}" value="${CALC[k][f]}"></label>`).join('')}</div><div id="out-${k}"></div></div>`;
+  return`<p class="warn">DISCLAIMER: These formulas were extracted from the Ragnarok Origin Global (ROOG) game client lua source code. We cannot confirm whether Ragnarok Origin Classic (ROOC) uses identical formulas, so use this calculator as a reference guide only. Formula based on a community guide (credits Lunarine / wolf999). Further in-game testing is required.</p><p>Enter the defender's stats and the attacker's ignore values to see the damage reduction. The numbers you type stay on your own device.</p>${box('p','PDEF')}${box('m','MDEF')}<div class="box"><h3>Reduction constant and reference</h3><p style="margin:6px 0">Reduction constant K = <strong>${defK()}</strong> (reduction = Gap / (Gap + K)). This is the original data mined by wolf999 and only the admin can change it.</p><span class="adm row">Admin: set K <input type="number" step="any" min="1" value="${defK()}" data-k></span><div id="ref" style="margin-top:10px"></div></div>`}
+function updCalc(){
+  const K=defK();
+  ['p','m'].forEach(k=>{const c=CALC[k],X=k=='p'?'PDEF':'MDEF',dv=1+c.eq/100,raw=dv>0?c.tot/dv:0,aft=Math.max(0,raw-c.flat),gap=aft*(1-c.ign/100)*dv,gr=gap+c.ref,red=gr+K>0?gr/(gr+K):0,el=$('#out-'+k);
+    if(!el)return;
+    el.innerHTML=`<table><tr><td>Raw ${X} (Total / (1 + % / 100))</td><td>${fx(raw)}</td></tr><tr><td>After flat ignore</td><td>${fx(aft)}</td></tr><tr><td>DEF Gap (after % ignore, x(1 + %))</td><td>${fx(gap)}</td></tr><tr><td>DEF Gap + Refine</td><td>${fx(gr)}</td></tr><tr><td><strong>Total reduction from DEF</strong></td><td><strong class="ok">${fx(red*100)}%</strong></td></tr><tr><td>Damage multiplier</td><td>${fx((1-red)*100)}%</td></tr></table>`});
+  const r=$('#ref');if(r)r.innerHTML=`<table><tr><th>DEF Gap</th><th>Reduction</th></tr>${[0,100,200,300,400,500,600,700,800,1000,1500,2000,3000,3500,4000].map(g=>`<tr><td>${g}</td><td>${fx(g+K>0?g/(g+K)*100:0)}%</td></tr>`).join('')}</table>`}
+document.addEventListener('input',ev=>{const c=ev.target.dataset&&ev.target.dataset.c;if(!c)return;const v=parseFloat(ev.target.value),[k,f]=c.split('.');CALC[k][f]=isFinite(v)?v:0;try{localStorage.setItem(CK,JSON.stringify(CALC))}catch(e){}updCalc()});
 function dl(name,text,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;a.click()}
 const ACT={
   won(e){const d=e.dataset.d,m=byId(e.dataset.m),a=aucn(d);if(wins(d,m.group)>=a.avail[m.group])return alert(`Group ${m.group} has no fragments left for this auction.`);S.history.push({date:d,mid:m.id,n:1})},
@@ -174,6 +192,7 @@ document.addEventListener('change',async ev=>{
       t.disabled=false;$('#admst').textContent='';
       if(ok){t.checked=true;PASS=p;sessionStorage.setItem('pw',p);if(serverEmpty)push()}else if(p)alert('Passcode not accepted.')}
     return render()}
+  if(t.dataset.k!==undefined){const v=parseFloat(t.value);if(v>0){S.defK=v;save();render();push()}return}
   if(t.dataset.cls){const m=byId(t.dataset.cls),v=t.value.trim();if(v)m.cls=v;save();render();push();return}
   if(t.dataset.man){const a=aucn(t.dataset.d),g=t.dataset.man;a.manual=a.manual||{};if(t.checked)a.manual[g]=[];else delete a.manual[g];save();render();push();return}
   if(t.dataset.pick){const a=aucn(t.dataset.d),g=t.dataset.g,id=+t.dataset.pick,l=a.manual[g]||[];if(t.checked){if(l.length>=a.avail[g]){t.checked=false;return alert(`Group ${g} only has ${a.avail[g]} fragment(s) available. Raise the number or untick someone first.`)}a.manual[g]=[...l,id]}else a.manual[g]=l.filter(x=>x!=id);save();render();push();return}
