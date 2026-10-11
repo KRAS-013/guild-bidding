@@ -54,11 +54,11 @@ th{color:var(--mut);font-weight:600;font-size:14px}
 </style>
 </head>
 <body>
-<header><h1>Puppet Fragment Bidding</h1><button data-act="refresh">Refresh</button> <label class="sw"><input type="checkbox" id="admtog" autocomplete="off"> Admin mode</label></header>
+<header><h1>Puppet Fragment Bidding</h1><button data-act="refresh">Refresh</button> <label class="sw"><input type="checkbox" id="admtog" autocomplete="off"> Admin mode<small id="admst"></small></label></header>
 <nav><button data-tab="auctions" class="on">Auctions</button><button data-tab="members">Members</button><button data-tab="admin" class="adm">Admin</button></nav>
 <main id="v"></main>
 <script>
-const API='https://script.google.com/macros/s/AKfycby3Er6hwuyYO7BKAQNJgP0fvgvzDAmx_tGXoDBbJ_9jEAJQcGx0CyY98sFYlhhH7Aq8Cg/exec'; // Google Apps Script web app URL
+const API='PASTE_YOUR_WEB_APP_URL_HERE'; // Google Apps Script web app URL
 const KEY='rocGuildBids2_v1',$=s=>document.querySelector(s);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const DEF=()=>({nid:1,groups:[],members:[],auctions:[],history:[],requests:[]});
@@ -167,8 +167,12 @@ document.addEventListener('click',async ev=>{
 document.addEventListener('change',async ev=>{
   const t=ev.target;
   if(t.id=='admtog'){
-    if(t.checked&&live()){const p=prompt('Admin passcode');let ok=false;try{ok=p&&(await api({action:'check',pass:p})).ok}catch(e){}
-      if(!ok){t.checked=false;alert('Passcode not accepted.')}else{PASS=p;sessionStorage.setItem('pw2',p);if(serverEmpty)push()}}
+    if(t.checked&&live()){
+      t.checked=false;t.disabled=true;$('#admst').textContent=' Checking...';
+      const p=prompt('Admin passcode');let ok=false;
+      if(p){try{ok=(await api({action:'check',pass:p})).ok}catch(e){}}
+      t.disabled=false;$('#admst').textContent='';
+      if(ok){t.checked=true;PASS=p;sessionStorage.setItem('pw2',p);if(serverEmpty)push()}else if(p)alert('Passcode not accepted.')}
     return render()}
   if(t.dataset.cls){const m=byId(t.dataset.cls),v=t.value.trim();if(v)m.cls=v;save();render();push();return}
   if(t.dataset.man){const a=aucn(t.dataset.d),g=t.dataset.man;a.manual=a.manual||{};if(t.checked)a.manual[g]=[];else delete a.manual[g];save();render();push();return}
